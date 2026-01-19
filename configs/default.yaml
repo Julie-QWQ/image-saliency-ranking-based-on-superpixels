@@ -1,0 +1,47 @@
+seed: 42
+
+paths:
+  train_images: data/train/images
+  train_masks: data/train/masks
+  val_images: data/val/images
+  val_masks: data/val/masks
+  test_images: data/test/images
+  test_masks: data/test/masks
+  output_dir: outputs
+
+slic:
+  num_segments: 200
+  compactness: 10.0
+  sigma: 1.0
+  max_num_iter: 10
+  start_label: 0
+
+labels:
+  tau_pos: 0.8
+  tau_neg: 0.2
+  ignore_value: -1
+
+masking:
+  n_ring: 1
+
+model:
+  input_size: 224
+  feature_dim: 128
+  mlp_hidden: 64
+
+train:
+  batch_size: 8
+  num_workers: 0
+  lr: 0.0005
+  weight_decay: 0.0001
+  epochs: 5
+  log_interval: 10
+  save_interval: 1
+
+inference:
+  multi_scale: [200, 400, 800, 1600]
+  save_visuals: true
+
+runtime:
+  device: auto
+  deterministic: true
