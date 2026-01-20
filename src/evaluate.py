@@ -9,24 +9,28 @@ from .infer import predict_multiscale, predict_image
 from .utils import compute_metrics, read_image_rgb, read_mask_binary, save_json
 
 
-def evaluate(model, images_dir, masks_dir, cfg, device):
+def evaluate(model, images_dir, masks_dir, cfg, device, max_images=None):
     images = _list_images(images_dir)
     masks = _match_masks(images, masks_dir)
+    if max_images is not None:
+        images = images[:max_images]
+        masks = masks[:max_images]
     metrics = []
 
     slic_cfg = cfg["slic"]
     mask_cfg = cfg["masking"]
     input_size = cfg["model"]["input_size"]
     k_list = cfg["inference"]["multi_scale"]
+    batch_size = cfg["inference"].get("batch_size", 64)
 
     progress = tqdm(zip(images, masks), total=len(images), desc="validate", leave=False)
     for img_path, mask_path in progress:
         image = read_image_rgb(img_path)
         gt = read_mask_binary(mask_path)
         if k_list:
-            heatmap = predict_multiscale(model, image, slic_cfg, mask_cfg, input_size, device, k_list)
+            heatmap = predict_multiscale(model, image, slic_cfg, mask_cfg, input_size, device, k_list, batch_size=batch_size)
         else:
-            heatmap = predict_image(model, image, slic_cfg, mask_cfg, input_size, device)
+            heatmap = predict_image(model, image, slic_cfg, mask_cfg, input_size, device, batch_size=batch_size)
         metrics.append(compute_metrics(heatmap, gt))
         progress.set_postfix(count=len(metrics))
 

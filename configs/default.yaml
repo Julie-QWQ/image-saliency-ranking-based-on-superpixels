@@ -41,6 +41,7 @@ train:  # 训练超参数
 inference:  # 推理与可视化
   multi_scale: [200, 400, 800, 1600]  # 多尺度超像素数量
   save_visuals: true  # 是否保存热力图/叠加图
+  batch_size: 64  # 同图内超像素 batch 推理大小
 
 runtime:  # 运行时设置
   device: auto  # auto / cpu / cuda

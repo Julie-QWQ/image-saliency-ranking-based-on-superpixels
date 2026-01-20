@@ -26,18 +26,6 @@ python scripts/prepare_datasets.py
 python train.py --config configs/default.yaml
 ```
 
-## 配置说明（configs/default.yaml）
-
-- `seed`：随机种子。
-- `paths`：数据与输出路径（train/val/test 的 images 与 masks，以及 `output_dir`）。
-- `slic`：SLIC 超像素参数（数量、紧致度、平滑、迭代次数、起始标签）。
-- `labels`：超像素标签阈值（`tau_pos`/`tau_neg`，其余为忽略）。
-- `masking`：N-ring 邻域范围。
-- `model`：网络结构参数（输入尺寸、特征维度、融合层隐藏维度）。
-- `train`：训练超参数（batch size、学习率、权重衰减、训练轮数、日志与保存间隔）。
-- `inference`：推理设置（多尺度超像素列表、是否保存可视化）。
-- `runtime`：运行时设置（设备、确定性开关）。
-
 ## 推理
 
 ```python
@@ -49,3 +37,15 @@ python infer.py --config configs/default.yaml --checkpoint outputs/train_*/model
 ```python
 python evaluate.py --config configs/default.yaml --checkpoint outputs/train_*/model_final.pt --split test
 ```
+
+## 配置说明（configs/default.yaml）
+
+- `seed`：随机种子。
+- `paths`：数据与输出路径（train/val/test 的 images 与 masks，以及 `output_dir`）。
+- `slic`：SLIC 超像素参数（数量、紧致度、平滑、迭代次数、起始标签）。
+- `labels`：超像素标签阈值（`tau_pos`/`tau_neg`，其余为忽略）。
+- `masking`：N-ring 邻域范围。
+- `model`：网络结构参数（输入尺寸、特征维度、融合层隐藏维度）。
+- `train`：训练超参数（batch size、学习率、权重衰减、训练轮数、日志与保存间隔）。
+- `inference`：推理设置（多尺度超像素列表、是否保存可视化、同图内 batch 大小）。
+- `runtime`：运行时设置（设备、确定性开关）。

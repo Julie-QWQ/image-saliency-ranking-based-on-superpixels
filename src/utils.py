@@ -28,14 +28,16 @@ def setup_run_dir(base_dir, name):
 
 def setup_logger(log_path):
     logger = logging.getLogger()
-    logger.setLevel(logging.INFO)
+    logger.setLevel(logging.DEBUG)
     logger.handlers = []
     handler = logging.FileHandler(log_path, encoding="utf-8")
     formatter = logging.Formatter("%(asctime)s %(levelname)s %(message)s")
     handler.setFormatter(formatter)
+    handler.setLevel(logging.DEBUG)
     logger.addHandler(handler)
     console = logging.StreamHandler()
     console.setFormatter(formatter)
+    console.setLevel(logging.INFO)
     logger.addHandler(console)
     return logger
 

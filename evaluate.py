@@ -14,6 +14,7 @@ def main():
     parser.add_argument("--checkpoint", required=True)
     parser.add_argument("--split", default="test", choices=["train", "val", "test"])
     parser.add_argument("--output", default=None)
+    parser.add_argument("--max_images", type=int, default=None)
     args = parser.parse_args()
 
     cfg = load_config(args.config)
@@ -26,7 +27,7 @@ def main():
     images_dir = cfg["paths"][f"{args.split}_images"]
     masks_dir = cfg["paths"][f"{args.split}_masks"]
 
-    metrics = evaluate(model, images_dir, masks_dir, cfg, device)
+    metrics = evaluate(model, images_dir, masks_dir, cfg, device, max_images=args.max_images)
 
     output_path = args.output or os.path.join(cfg["paths"]["output_dir"], f"metrics_{args.split}.json")
     save_json(metrics, output_path)

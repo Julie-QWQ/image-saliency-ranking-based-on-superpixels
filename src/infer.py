@@ -8,41 +8,49 @@ from .superpixel import build_adjacency, compute_slic, n_ring_neighbors
 from .utils import ensure_dir, resize_image, to_tensor
 
 
-def predict_image(model, image, slic_cfg, mask_cfg, input_size, device):
+def predict_image(model, image, slic_cfg, mask_cfg, input_size, device, batch_size=64):
     label_map = compute_slic(image, **slic_cfg)
     adjacency = build_adjacency(label_map, connectivity=8)
     heatmap = np.zeros(label_map.shape, dtype=np.float32)
 
     with torch.no_grad():
-        for sp_id in np.unique(label_map):
-            target_mask = (label_map == sp_id).astype(np.uint8)
-            context_mask = _context_mask(label_map, adjacency, sp_id, mask_cfg["n_ring"])
+        sp_ids = np.unique(label_map).tolist()
+        xc = resize_image(image, input_size)
+        xc_t = to_tensor(xc).unsqueeze(0).to(device)
+        fc = model.branch_c(xc_t)
 
-            xa = _apply_mask(image, target_mask)
-            xb = _apply_mask(image, context_mask)
-            xc = image
+        for start in range(0, len(sp_ids), batch_size):
+            batch_ids = sp_ids[start : start + batch_size]
+            xa_list = []
+            xb_list = []
+            for sp_id in batch_ids:
+                target_mask = (label_map == sp_id).astype(np.uint8)
+                context_mask = _context_mask(label_map, adjacency, sp_id, mask_cfg["n_ring"])
+                xa = _apply_mask(image, target_mask)
+                xb = _apply_mask(image, context_mask)
+                xa_list.append(resize_image(xa, input_size))
+                xb_list.append(resize_image(xb, input_size))
 
-            xa = resize_image(xa, input_size)
-            xb = resize_image(xb, input_size)
-            xc = resize_image(xc, input_size)
-
-            xa_t = to_tensor(xa).unsqueeze(0).to(device)
-            xb_t = to_tensor(xb).unsqueeze(0).to(device)
-            xc_t = to_tensor(xc).unsqueeze(0).to(device)
-
-            logit = model(xa_t, xb_t, xc_t)
-            prob = torch.sigmoid(logit).cpu().numpy().item()
-            heatmap[label_map == sp_id] = prob
+            xa_t = torch.stack([to_tensor(xa) for xa in xa_list]).to(device)
+            xb_t = torch.stack([to_tensor(xb) for xb in xb_list]).to(device)
+            fa = model.branch_a(xa_t)
+            fb = model.branch_b(xb_t)
+            fc_rep = fc.repeat(len(batch_ids), 1)
+            z = torch.relu(model.fc7(torch.cat([fa, fb, fc_rep], dim=1)))
+            logits = model.head(z).squeeze(1)
+            probs = torch.sigmoid(logits).cpu().numpy()
+            for sp_id, prob in zip(batch_ids, probs):
+                heatmap[label_map == sp_id] = float(prob)
 
     return heatmap
 
 
-def predict_multiscale(model, image, slic_cfg, mask_cfg, input_size, device, k_list):
+def predict_multiscale(model, image, slic_cfg, mask_cfg, input_size, device, k_list, batch_size=64):
     heatmaps = []
     for k in k_list:
         cfg = dict(slic_cfg)
         cfg["num_segments"] = int(k)
-        heatmaps.append(predict_image(model, image, cfg, mask_cfg, input_size, device))
+        heatmaps.append(predict_image(model, image, cfg, mask_cfg, input_size, device, batch_size=batch_size))
     return np.mean(heatmaps, axis=0)
 
 
