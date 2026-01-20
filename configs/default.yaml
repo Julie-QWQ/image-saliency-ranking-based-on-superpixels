@@ -8,6 +8,7 @@ paths:  # 数据与输出路径
   test_images: data/test/images
   test_masks: data/test/masks
   output_dir: outputs
+  cache_dir: data/cache
 
 slic:  # SLIC 超像素参数
   num_segments: 200  # 超像素数量

@@ -1,3 +1,4 @@
+import hashlib
 import os
 
 import cv2
@@ -8,8 +9,11 @@ from .superpixel import build_adjacency, compute_slic, n_ring_neighbors
 from .utils import ensure_dir, resize_image, to_tensor
 
 
-def predict_image(model, image, slic_cfg, mask_cfg, input_size, device, batch_size=64):
-    label_map = compute_slic(image, **slic_cfg)
+def predict_image(model, image, slic_cfg, mask_cfg, input_size, device, batch_size=64, cache_dir=None, image_path=None):
+    label_map = _load_label_cache(image_path, slic_cfg, cache_dir)
+    if label_map is None:
+        label_map = compute_slic(image, **slic_cfg)
+        _save_label_cache(image_path, slic_cfg, cache_dir, label_map)
     adjacency = build_adjacency(label_map, connectivity=8)
     heatmap = np.zeros(label_map.shape, dtype=np.float32)
 
@@ -45,12 +49,24 @@ def predict_image(model, image, slic_cfg, mask_cfg, input_size, device, batch_si
     return heatmap
 
 
-def predict_multiscale(model, image, slic_cfg, mask_cfg, input_size, device, k_list, batch_size=64):
+def predict_multiscale(model, image, slic_cfg, mask_cfg, input_size, device, k_list, batch_size=64, cache_dir=None, image_path=None):
     heatmaps = []
     for k in k_list:
         cfg = dict(slic_cfg)
         cfg["num_segments"] = int(k)
-        heatmaps.append(predict_image(model, image, cfg, mask_cfg, input_size, device, batch_size=batch_size))
+        heatmaps.append(
+            predict_image(
+                model,
+                image,
+                cfg,
+                mask_cfg,
+                input_size,
+                device,
+                batch_size=batch_size,
+                cache_dir=cache_dir,
+                image_path=image_path,
+            )
+        )
     return np.mean(heatmaps, axis=0)
 
 
@@ -76,3 +92,34 @@ def _context_mask(label_map, adjacency, sp_id, n_ring):
     for n in neighbors:
         context[label_map == n] = 1
     return context
+
+
+def _label_cache_path(image_path, slic_cfg, cache_dir):
+    if not cache_dir or not image_path:
+        return None
+    os.makedirs(cache_dir, exist_ok=True)
+    parts = [
+        os.path.abspath(image_path),
+        str(os.path.getmtime(image_path)),
+        str(slic_cfg),
+    ]
+    digest = hashlib.sha1("|".join(parts).encode("utf-8")).hexdigest()
+    return os.path.join(cache_dir, f"label_{digest}.npz")
+
+
+def _load_label_cache(image_path, slic_cfg, cache_dir):
+    cache_path = _label_cache_path(image_path, slic_cfg, cache_dir)
+    if not cache_path or not os.path.exists(cache_path):
+        return None
+    try:
+        data = np.load(cache_path)
+        return data["label_map"]
+    except Exception:
+        return None
+
+
+def _save_label_cache(image_path, slic_cfg, cache_dir, label_map):
+    cache_path = _label_cache_path(image_path, slic_cfg, cache_dir)
+    if not cache_path:
+        return
+    np.savez_compressed(cache_path, label_map=label_map)

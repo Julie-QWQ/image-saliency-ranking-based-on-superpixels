@@ -19,7 +19,7 @@ from .utils import (
 )
 
 
-def train(config_path, no_val=False):
+def train(config_path, no_val=False, resume_path=None):
     cfg = load_config(config_path)
     set_seed(cfg["seed"], cfg["runtime"]["deterministic"])
     device = get_device(cfg["runtime"]["device"])
@@ -37,6 +37,7 @@ def train(config_path, no_val=False):
         cfg["labels"],
         cfg["masking"],
         cfg["model"]["input_size"],
+        cache_dir=cfg["paths"].get("cache_dir"),
     )
     logger.info("train dataset ready, samples=%d", len(train_dataset))
     logger.info("building dataloader...")
@@ -59,9 +60,19 @@ def train(config_path, no_val=False):
     criterion = torch.nn.BCEWithLogitsLoss()
     logger.info("optimizer and loss ready")
 
+    start_epoch = 1
     loss_history = []
+    if resume_path:
+        if not os.path.exists(resume_path):
+            raise FileNotFoundError(resume_path)
+        logger.info("resuming from checkpoint: %s", resume_path)
+        ckpt = torch.load(resume_path, map_location=device)
+        model.load_state_dict(ckpt["model_state"])
+        optimizer.load_state_dict(ckpt["optimizer_state"])
+        start_epoch = ckpt["epoch"] + 1
+        loss_history = ckpt.get("loss_history", [])
     val_history = {"mae": [], "iou": [], "f1": []}
-    for epoch in range(1, cfg["train"]["epochs"] + 1):
+    for epoch in range(start_epoch, cfg["train"]["epochs"] + 1):
         model.train()
         running_loss = 0.0
         epoch_loss = 0.0
@@ -92,7 +103,17 @@ def train(config_path, no_val=False):
         if epoch % cfg["train"]["save_interval"] == 0:
             ckpt_path = os.path.join(run_dir, f"model_epoch_{epoch}.pt")
             torch.save(model.state_dict(), ckpt_path)
-            logger.info("checkpoint saved: %s", ckpt_path)
+            resume_path = os.path.join(run_dir, f"checkpoint_epoch_{epoch}.pt")
+            torch.save(
+                {
+                    "epoch": epoch,
+                    "model_state": model.state_dict(),
+                    "optimizer_state": optimizer.state_dict(),
+                    "loss_history": loss_history,
+                },
+                resume_path,
+            )
+            logger.info("checkpoint saved: %s", resume_path)
 
         val_metrics = None
         if epoch % cfg["train"].get("val_interval", 1) == 0:
@@ -168,8 +189,9 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", default="configs/default.yaml")
     parser.add_argument("--no_val", action="store_true")
+    parser.add_argument("--resume", default=None, help="path to checkpoint_epoch_*.pt")
     args = parser.parse_args()
-    train(args.config, no_val=args.no_val)
+    train(args.config, no_val=args.no_val, resume_path=args.resume)
 
 
 if __name__ == "__main__":

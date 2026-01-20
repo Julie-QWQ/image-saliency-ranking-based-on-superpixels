@@ -47,15 +47,37 @@ def main():
     input_size = cfg["model"]["input_size"]
     k_list = cfg["inference"]["multi_scale"]
     batch_size = cfg["inference"].get("batch_size", 64)
+    cache_dir = cfg["paths"].get("cache_dir")
 
     progress = tqdm(images, desc=f"infer {args.split}", leave=False)
     for img_path in progress:
         name = os.path.splitext(os.path.basename(img_path))[0]
         image = read_image_rgb(img_path)
         if k_list:
-            heatmap = predict_multiscale(model, image, slic_cfg, mask_cfg, input_size, device, k_list, batch_size=batch_size)
+            heatmap = predict_multiscale(
+                model,
+                image,
+                slic_cfg,
+                mask_cfg,
+                input_size,
+                device,
+                k_list,
+                batch_size=batch_size,
+                cache_dir=cache_dir,
+                image_path=img_path,
+            )
         else:
-            heatmap = predict_image(model, image, slic_cfg, mask_cfg, input_size, device, batch_size=batch_size)
+            heatmap = predict_image(
+                model,
+                image,
+                slic_cfg,
+                mask_cfg,
+                input_size,
+                device,
+                batch_size=batch_size,
+                cache_dir=cache_dir,
+                image_path=img_path,
+            )
         if cfg["inference"]["save_visuals"]:
             save_visuals(image, heatmap, out_dir, name)
 

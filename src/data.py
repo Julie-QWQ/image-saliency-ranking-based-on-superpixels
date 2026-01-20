@@ -1,7 +1,10 @@
 import glob
 import os
 
+import hashlib
 import logging
+import os
+
 import numpy as np
 import torch
 from torch.utils.data import Dataset
@@ -20,6 +23,7 @@ class SuperpixelSaliencyDataset(Dataset):
         label_cfg,
         mask_cfg,
         input_size,
+        cache_dir=None,
     ):
         self.images = _list_images(images_dir)
         self.masks = _match_masks(self.images, masks_dir)
@@ -27,6 +31,7 @@ class SuperpixelSaliencyDataset(Dataset):
         self.label_cfg = label_cfg
         self.mask_cfg = mask_cfg
         self.input_size = input_size
+        self.cache_dir = cache_dir
 
         self._image_cache = []
         self._mask_cache = []
@@ -70,9 +75,14 @@ class SuperpixelSaliencyDataset(Dataset):
         progress = tqdm(zip(self.images, self.masks), total=total_images, desc="build dataset", leave=False)
         for img_path, mask_path in progress:
             image = read_image_rgb(img_path)
-            mask = read_mask_binary(mask_path)
-
-            label_map = compute_slic(image, **self.slic_cfg)
+            cache_payload = self._load_cache(img_path, mask_path)
+            if cache_payload is None:
+                mask = read_mask_binary(mask_path)
+                label_map = compute_slic(image, **self.slic_cfg)
+                sp_ids, sp_labels = _label_superpixels(label_map, mask, self.label_cfg)
+                self._save_cache(img_path, mask_path, label_map, sp_ids, sp_labels)
+            else:
+                label_map, sp_ids, sp_labels = cache_payload
             adjacency = build_adjacency(label_map, connectivity=8)
 
             self._image_cache.append(image)
@@ -81,16 +91,49 @@ class SuperpixelSaliencyDataset(Dataset):
             self._adjacency.append(adjacency)
 
             valid_before = len(self.samples)
-            for sp_id in np.unique(label_map):
-                sp_mask = label_map == sp_id
-                ratio = mask[sp_mask].mean() if sp_mask.any() else 0.0
-                label = _label_from_ratio(ratio, self.label_cfg)
-                if label is None:
-                    continue
-                self.samples.append((len(self._image_cache) - 1, int(sp_id), label))
+            for sp_id, label in zip(sp_ids, sp_labels):
+                self.samples.append((len(self._image_cache) - 1, int(sp_id), float(label)))
             added = len(self.samples) - valid_before
             progress.set_postfix(added=added)
         self._logger.info("dataset build done, images=%d samples=%d", total_images, len(self.samples))
+
+    def _cache_key(self, img_path, mask_path):
+        parts = [
+            os.path.abspath(img_path),
+            str(os.path.getmtime(img_path)),
+            os.path.abspath(mask_path),
+            str(os.path.getmtime(mask_path)),
+            str(self.slic_cfg),
+            str(self.label_cfg),
+        ]
+        digest = hashlib.sha1("|".join(parts).encode("utf-8")).hexdigest()
+        return digest
+
+    def _cache_path(self, img_path, mask_path):
+        if not self.cache_dir:
+            return None
+        os.makedirs(self.cache_dir, exist_ok=True)
+        return os.path.join(self.cache_dir, f"{self._cache_key(img_path, mask_path)}.npz")
+
+    def _load_cache(self, img_path, mask_path):
+        cache_path = self._cache_path(img_path, mask_path)
+        if not cache_path or not os.path.exists(cache_path):
+            return None
+        try:
+            data = np.load(cache_path)
+            label_map = data["label_map"]
+            sp_ids = data["sp_ids"]
+            sp_labels = data["sp_labels"]
+            return label_map, sp_ids, sp_labels
+        except Exception as exc:
+            self._logger.info("cache load failed: %s (%s)", cache_path, exc)
+            return None
+
+    def _save_cache(self, img_path, mask_path, label_map, sp_ids, sp_labels):
+        cache_path = self._cache_path(img_path, mask_path)
+        if not cache_path:
+            return
+        np.savez_compressed(cache_path, label_map=label_map, sp_ids=sp_ids, sp_labels=sp_labels)
 
     def _context_mask(self, target_mask, label_map, adjacency, sp_id):
         context = target_mask.copy()
@@ -117,6 +160,20 @@ def _label_from_ratio(ratio, label_cfg):
     if ratio <= label_cfg["tau_neg"]:
         return 0.0
     return None
+
+
+def _label_superpixels(label_map, mask, label_cfg):
+    sp_ids = []
+    sp_labels = []
+    for sp_id in np.unique(label_map):
+        sp_mask = label_map == sp_id
+        ratio = mask[sp_mask].mean() if sp_mask.any() else 0.0
+        label = _label_from_ratio(ratio, label_cfg)
+        if label is None:
+            continue
+        sp_ids.append(int(sp_id))
+        sp_labels.append(float(label))
+    return np.array(sp_ids, dtype=np.int32), np.array(sp_labels, dtype=np.float32)
 
 
 def _list_images(images_dir):

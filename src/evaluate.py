@@ -22,15 +22,37 @@ def evaluate(model, images_dir, masks_dir, cfg, device, max_images=None):
     input_size = cfg["model"]["input_size"]
     k_list = cfg["inference"]["multi_scale"]
     batch_size = cfg["inference"].get("batch_size", 64)
+    cache_dir = cfg["paths"].get("cache_dir")
 
     progress = tqdm(zip(images, masks), total=len(images), desc="validate", leave=False)
     for img_path, mask_path in progress:
         image = read_image_rgb(img_path)
         gt = read_mask_binary(mask_path)
         if k_list:
-            heatmap = predict_multiscale(model, image, slic_cfg, mask_cfg, input_size, device, k_list, batch_size=batch_size)
+            heatmap = predict_multiscale(
+                model,
+                image,
+                slic_cfg,
+                mask_cfg,
+                input_size,
+                device,
+                k_list,
+                batch_size=batch_size,
+                cache_dir=cache_dir,
+                image_path=img_path,
+            )
         else:
-            heatmap = predict_image(model, image, slic_cfg, mask_cfg, input_size, device, batch_size=batch_size)
+            heatmap = predict_image(
+                model,
+                image,
+                slic_cfg,
+                mask_cfg,
+                input_size,
+                device,
+                batch_size=batch_size,
+                cache_dir=cache_dir,
+                image_path=img_path,
+            )
         metrics.append(compute_metrics(heatmap, gt))
         progress.set_postfix(count=len(metrics))
 
