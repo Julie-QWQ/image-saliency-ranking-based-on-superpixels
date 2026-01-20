@@ -37,6 +37,7 @@ train:  # 训练超参数
   epochs: 5
   log_interval: 10  # 日志间隔（step）
   save_interval: 1  # 保存间隔（epoch）
+  val_interval: 1  # 验证间隔（epoch）
 
 inference:  # 推理与可视化
   multi_scale: [200, 400, 800, 1600]  # 多尺度超像素数量

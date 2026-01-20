@@ -46,6 +46,6 @@ python evaluate.py --config configs/default.yaml --checkpoint outputs/train_*/mo
 - `labels`：超像素标签阈值（`tau_pos`/`tau_neg`，其余为忽略）。
 - `masking`：N-ring 邻域范围。
 - `model`：网络结构参数（输入尺寸、特征维度、融合层隐藏维度）。
-- `train`：训练超参数（batch size、学习率、权重衰减、训练轮数、日志与保存间隔）。
+- `train`：训练超参数（batch size、学习率、权重衰减、训练轮数、日志/保存/验证间隔）。
 - `inference`：推理设置（多尺度超像素列表、是否保存可视化、同图内 batch 大小）。
 - `runtime`：运行时设置（设备、确定性开关）。

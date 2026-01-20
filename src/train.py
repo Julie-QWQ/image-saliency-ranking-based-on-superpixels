@@ -94,8 +94,10 @@ def train(config_path, no_val=False):
             torch.save(model.state_dict(), ckpt_path)
             logger.info("checkpoint saved: %s", ckpt_path)
 
-        logger.info("running validation (if available)...")
-        val_metrics = _maybe_eval(model, cfg, device, no_val=no_val)
+        val_metrics = None
+        if epoch % cfg["train"].get("val_interval", 1) == 0:
+            logger.info("running validation (if available)...")
+            val_metrics = _maybe_eval(model, cfg, device, no_val=no_val)
         if val_metrics:
             logger.info("epoch %d val_mae %.4f val_iou %.4f val_f1 %.4f", epoch, val_metrics["mae"], val_metrics["iou"], val_metrics["f1"])
             save_json(val_metrics, os.path.join(run_dir, f"val_metrics_epoch_{epoch}.json"))
