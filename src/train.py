@@ -19,7 +19,7 @@ from .utils import (
 )
 
 
-def train(config_path):
+def train(config_path, no_val=False):
     cfg = load_config(config_path)
     set_seed(cfg["seed"], cfg["runtime"]["deterministic"])
     device = get_device(cfg["runtime"]["device"])
@@ -95,7 +95,7 @@ def train(config_path):
             logger.info("checkpoint saved: %s", ckpt_path)
 
         logger.info("running validation (if available)...")
-        val_metrics = _maybe_eval(model, cfg, device)
+        val_metrics = _maybe_eval(model, cfg, device, no_val=no_val)
         if val_metrics:
             logger.info("epoch %d val_mae %.4f val_iou %.4f val_f1 %.4f", epoch, val_metrics["mae"], val_metrics["iou"], val_metrics["f1"])
             save_json(val_metrics, os.path.join(run_dir, f"val_metrics_epoch_{epoch}.json"))
@@ -149,7 +149,9 @@ def _save_val_plot(val_history, run_dir):
     plt.close()
 
 
-def _maybe_eval(model, cfg, device):
+def _maybe_eval(model, cfg, device, no_val=False):
+    if no_val:
+        return None
     val_images = cfg["paths"]["val_images"]
     val_masks = cfg["paths"]["val_masks"]
     if not (os.path.exists(val_images) and os.path.exists(val_masks)):
@@ -163,8 +165,9 @@ def main():
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", default="configs/default.yaml")
+    parser.add_argument("--no_val", action="store_true")
     args = parser.parse_args()
-    train(args.config)
+    train(args.config, no_val=args.no_val)
 
 
 if __name__ == "__main__":
