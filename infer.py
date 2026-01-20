@@ -3,6 +3,7 @@ import glob
 import os
 
 import torch
+from tqdm import tqdm
 
 from src.infer import predict_multiscale, predict_image, save_visuals
 from src.model import MultiBranchNet
@@ -46,7 +47,8 @@ def main():
     input_size = cfg["model"]["input_size"]
     k_list = cfg["inference"]["multi_scale"]
 
-    for img_path in images:
+    progress = tqdm(images, desc=f"infer {args.split}", leave=False)
+    for img_path in progress:
         name = os.path.splitext(os.path.basename(img_path))[0]
         image = read_image_rgb(img_path)
         if k_list:

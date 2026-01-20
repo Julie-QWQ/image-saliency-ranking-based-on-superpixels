@@ -3,6 +3,7 @@ import os
 
 import numpy as np
 import torch
+from tqdm import tqdm
 
 from .infer import predict_multiscale, predict_image
 from .utils import compute_metrics, read_image_rgb, read_mask_binary, save_json
@@ -18,7 +19,8 @@ def evaluate(model, images_dir, masks_dir, cfg, device):
     input_size = cfg["model"]["input_size"]
     k_list = cfg["inference"]["multi_scale"]
 
-    for img_path, mask_path in zip(images, masks):
+    progress = tqdm(zip(images, masks), total=len(images), desc="validate", leave=False)
+    for img_path, mask_path in progress:
         image = read_image_rgb(img_path)
         gt = read_mask_binary(mask_path)
         if k_list:
@@ -26,6 +28,7 @@ def evaluate(model, images_dir, masks_dir, cfg, device):
         else:
             heatmap = predict_image(model, image, slic_cfg, mask_cfg, input_size, device)
         metrics.append(compute_metrics(heatmap, gt))
+        progress.set_postfix(count=len(metrics))
 
     return _aggregate(metrics)
 

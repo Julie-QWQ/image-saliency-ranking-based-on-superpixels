@@ -2,6 +2,7 @@ import os
 
 import torch
 from torch.utils.data import DataLoader
+from tqdm import tqdm
 
 from .data import SuperpixelSaliencyDataset
 from .evaluate import evaluate
@@ -25,7 +26,9 @@ def train(config_path):
     run_dir = setup_run_dir(cfg["paths"]["output_dir"], "train")
     logger = setup_logger(os.path.join(run_dir, "train.log"))
     save_json(cfg, os.path.join(run_dir, "config.json"))
+    logger.info("config loaded, device=%s, run_dir=%s", device, run_dir)
 
+    logger.info("building train dataset...")
     train_dataset = SuperpixelSaliencyDataset(
         cfg["paths"]["train_images"],
         cfg["paths"]["train_masks"],
@@ -34,25 +37,35 @@ def train(config_path):
         cfg["masking"],
         cfg["model"]["input_size"],
     )
+    logger.info("train dataset ready, samples=%d", len(train_dataset))
+    logger.info("building dataloader...")
     train_loader = DataLoader(
         train_dataset,
         batch_size=cfg["train"]["batch_size"],
         shuffle=True,
         num_workers=cfg["train"]["num_workers"],
     )
+    logger.info("dataloader ready, batch_size=%d", cfg["train"]["batch_size"])
 
+    logger.info("building model...")
     model = MultiBranchNet(cfg["model"]["feature_dim"], cfg["model"]["mlp_hidden"]).to(device)
+    logger.info("model ready")
     optimizer = torch.optim.Adam(
         model.parameters(),
         lr=cfg["train"]["lr"],
         weight_decay=cfg["train"]["weight_decay"],
     )
     criterion = torch.nn.BCEWithLogitsLoss()
+    logger.info("optimizer and loss ready")
 
     for epoch in range(1, cfg["train"]["epochs"] + 1):
         model.train()
         running_loss = 0.0
-        for step, (xa, xb, xc, y) in enumerate(train_loader, start=1):
+        epoch_loss = 0.0
+        step_count = 0
+        logger.info("epoch %d start", epoch)
+        progress = tqdm(train_loader, desc=f"epoch {epoch}", leave=False)
+        for step, (xa, xb, xc, y) in enumerate(progress, start=1):
             xa = xa.to(device)
             xb = xb.to(device)
             xc = xc.to(device)
@@ -65,19 +78,28 @@ def train(config_path):
             optimizer.step()
 
             running_loss += loss.item()
+            epoch_loss += loss.item()
+            step_count += 1
             if step % cfg["train"]["log_interval"] == 0:
                 avg_loss = running_loss / cfg["train"]["log_interval"]
                 logger.info("epoch %d step %d loss %.4f", epoch, step, avg_loss)
                 running_loss = 0.0
+            if step_count > 0:
+                progress.set_postfix(loss=f"{loss.item():.4f}")
 
         if epoch % cfg["train"]["save_interval"] == 0:
             ckpt_path = os.path.join(run_dir, f"model_epoch_{epoch}.pt")
             torch.save(model.state_dict(), ckpt_path)
+            logger.info("checkpoint saved: %s", ckpt_path)
 
+        logger.info("running validation (if available)...")
         val_metrics = _maybe_eval(model, cfg, device)
         if val_metrics:
             logger.info("epoch %d val_mae %.4f val_iou %.4f val_f1 %.4f", epoch, val_metrics["mae"], val_metrics["iou"], val_metrics["f1"])
             save_json(val_metrics, os.path.join(run_dir, f"val_metrics_epoch_{epoch}.json"))
+            logger.info("validation metrics saved")
+        if step_count > 0:
+            logger.info("epoch %d avg_loss %.4f end", epoch, epoch_loss / step_count)
 
     final_path = os.path.join(run_dir, "model_final.pt")
     torch.save(model.state_dict(), final_path)
