@@ -83,6 +83,7 @@ class SuperpixelSaliencyDataset(Dataset):
                 self._save_cache(img_path, mask_path, label_map, sp_ids, sp_labels)
             else:
                 label_map, sp_ids, sp_labels = cache_payload
+                mask = read_mask_binary(mask_path)
             adjacency = build_adjacency(label_map, connectivity=8)
             self._image_cache.append(image)
             self._mask_cache.append(mask)

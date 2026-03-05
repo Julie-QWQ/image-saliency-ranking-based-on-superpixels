@@ -69,12 +69,12 @@ class FullExperimentRunner:
                 criterion = FocalLoss(cfg['train'].get('focal_alpha', 0.25), cfg['train'].get('focal_gamma', 2.0))
             else:
                 criterion = torch.nn.BCEWithLogitsLoss()
-            
-                pbar = tqdm(train_loader, desc=f"  Training", leave=False, ncols=80)
+
             model.train()
             for epoch in range(1, epochs + 1):
                 total_loss, count = 0.0, 0
-                for xa, xb, xc, y in train_loader:
+                pbar = tqdm(train_loader, desc=f"Epoch {epoch}/{epochs}", leave=False, ncols=80)
+                for xa, xb, xc, y in pbar:
                     xa, xb, xc, y = xa.to(device), xb.to(device), xc.to(device), y.to(device)
                     optimizer.zero_grad()
                     loss = criterion(model(xa, xb, xc), y)
