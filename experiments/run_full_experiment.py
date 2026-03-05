@@ -16,6 +16,7 @@ from src.dss_baseline import DSSBaseline
 from src.utils import load_config, set_seed, get_device, read_image_rgb, read_mask_binary, compute_metrics
 from src.infer import predict_image
 from src.experiment_utils import ExperimentLogger, compute_average_metrics, generate_experiment_report, save_experiment_results
+from tqdm import tqdm
 
 class FullExperimentRunner:
     def __init__(self, base_output_dir="outputs/full_experiment"):
@@ -69,6 +70,7 @@ class FullExperimentRunner:
             else:
                 criterion = torch.nn.BCEWithLogitsLoss()
             
+                pbar = tqdm(train_loader, desc=f"  Training", leave=False, ncols=80)
             model.train()
             for epoch in range(1, epochs + 1):
                 total_loss, count = 0.0, 0
@@ -78,6 +80,7 @@ class FullExperimentRunner:
                     loss = criterion(model(xa, xb, xc), y)
                     loss.backward()
                     optimizer.step()
+                    pbar.set_postfix({"loss": f"{loss.item():.4f}"})
                     total_loss += loss.item()
                     count += 1
                 self.log(f"Epoch {epoch}/{epochs}: Loss = {total_loss/count:.4f}")
