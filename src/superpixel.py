@@ -46,6 +46,44 @@ def n_ring_neighbors(adjacency, node, n_ring):
     return visited
 
 
+def n_ring_neighbors_weighted(adjacency, node, n_ring):
+    """
+    带距离权重的 N-ring 邻域
+
+    返回邻居节点和对应的权重（距离越近权重越高）
+
+    Args:
+        adjacency: 邻接表
+        node: 目标节点
+        n_ring: 邻域半径
+
+    Returns:
+        List[(neighbor_id, weight)]: 邻居节点和权重列表
+    """
+    visited = {node}
+    frontier = {node}
+    distances = {node: 0}
+
+    for ring in range(n_ring):
+        next_frontier = set()
+        for u in frontier:
+            for v in adjacency.get(u, []):
+                if v not in visited:
+                    visited.add(v)
+                    next_frontier.add(v)
+                    distances[v] = ring + 1
+        frontier = next_frontier
+
+    # 计算权重（距离越近权重越高）
+    weighted_neighbors = []
+    for neighbor in visited - {node}:
+        distance = distances[neighbor]
+        weight = 1.0 / distance  # 距离为1权重为1，距离为2权重为0.5
+        weighted_neighbors.append((neighbor, weight))
+
+    return weighted_neighbors
+
+
 def _neighbors(connectivity):
     if connectivity == 4:
         return [(-1, 0), (1, 0), (0, -1), (0, 1)]

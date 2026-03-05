@@ -1,0 +1,28 @@
+# 对比实验配置
+
+seed: 42
+
+paths:
+  test_images: data/test/images
+  test_masks: data/test/masks
+  output_dir: outputs/comparison
+  cache_dir: data/cache
+
+slic:
+  num_segments: 200
+  compactness: 10.0
+  sigma: 1.0
+  max_num_iter: 10
+  start_label: 0
+
+masking:
+  n_ring: 1
+
+model:
+  input_size: 224
+  feature_dim: 128
+  mlp_hidden: 64
+
+runtime:
+  device: auto
+  deterministic: true

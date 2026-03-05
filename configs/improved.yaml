@@ -1,0 +1,56 @@
+seed: 42  # 随机种子
+
+paths:  # 数据与输出路径
+  train_images: data/train/images
+  train_masks: data/train/masks
+  val_images: data/val/images
+  val_masks: data/val/masks
+  test_images: data/test/images
+  test_masks: data/test/masks
+  output_dir: outputs
+  cache_dir: data/cache
+
+slic:  # SLIC 超像素参数
+  num_segments: 200  # 超像素数量
+  compactness: 10.0  # 紧致度
+  sigma: 1.0  # 高斯平滑
+  max_num_iter: 10  # 迭代次数
+  start_label: 0  # 起始标签
+
+labels:  # 超像素标签阈值
+  tau_pos: 0.8  # 正样本阈值
+  tau_neg: 0.2  # 负样本阈值
+  ignore_value: -1  # 忽略标签（当前代码未使用）
+
+masking:  # 邻域 mask 参数
+  n_ring: 2  # N-ring 邻域范围（从1增加到2）
+  use_weighted: false  # 是否使用距离权重
+
+model:  # 网络结构参数
+  input_size: 224  # 输入分支尺寸
+  feature_dim: 256  # 分支特征维度（从128增加到256）
+  mlp_hidden: 128  # 融合层隐藏维度（从64增加到128）
+  use_improved: true  # 是否使用改进的模型
+
+train:  # 训练超参数
+  batch_size: 8
+  num_workers: 0
+  lr: 0.0005
+  weight_decay: 0.0001
+  epochs: 5
+  log_interval: 10  # 日志间隔（step）
+  save_interval: 1  # 保存间隔（epoch）
+  val_interval: 1  # 验证间隔（epoch）
+  use_focal_loss: true  # 使用 Focal Loss
+  focal_alpha: 0.25
+  focal_gamma: 2.0
+
+inference:  # 推理与可视化
+  multi_scale: [200, 400, 800, 1600]  # 多尺度超像素数量
+  save_visuals: true  # 是否保存热力图/叠加图
+  batch_size: 64  # 同图内超像素 batch 推理大小
+  use_crf: false  # 是否使用 CRF 后处理
+
+runtime:  # 运行时设置
+  device: auto  # auto / cpu / cuda
+  deterministic: true  # 复现性开关
