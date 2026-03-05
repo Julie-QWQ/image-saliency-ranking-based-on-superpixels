@@ -1,0 +1,11 @@
+name: image-saliency-ranking
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pytorch=2.1.2
+  - torchvision
+  - pytorch-cuda=12.1
+  - uv

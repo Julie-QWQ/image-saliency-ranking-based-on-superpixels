@@ -1,0 +1,14 @@
+[project]
+name = "image-saliency-ranking-based-on-superpixels"
+version = "0.1.0"
+description = "Image saliency ranking based on superpixels"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "numpy==1.26.4",
+    "scikit-image==0.22.0",
+    "pyyaml==6.0.1",
+    "tqdm==4.66.1",
+    "matplotlib==3.8.2",
+    "opencv-python==4.9.0.80",
+]
