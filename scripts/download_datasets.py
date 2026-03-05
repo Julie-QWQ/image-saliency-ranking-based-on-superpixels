@@ -9,13 +9,17 @@ import zipfile
 DATASETS = {
     "MSRA-B": {
         "urls": [
+            # GitHub mirror (more reliable)
+            "https://github.com/JudgingSalamander/is-pnet-cpf/releases/download/v1.0/MSRA-B.zip",
+            # Original mirrors (may fail)
             "https://mftp.mmcheng.net/Data/MSRA-B.zip",
             "http://mftp.mmcheng.net/Data/MSRA-B.zip",
         ],
-        "referer": "http://mftp.mmcheng.net/",
+        "referer": "https://github.com/",
     },
     "DUTS-TE": {
         "urls": [
+            # Official DUTS mirror
             "http://saliencydetection.net/duts/download/DUTS-TE.zip",
             "https://saliencydetection.net/duts/download/DUTS-TE.zip",
         ],
@@ -54,7 +58,7 @@ def download(url, out_path, referer=None):
 
 def _download_with_cli(url, out_path, referer=None):
     if _has_cmd("curl"):
-        cmd = ["curl", "-L", "-A", "Mozilla/5.0"]
+        cmd = ["curl", "-L", "-A", "Mozilla/5.0", "-f"]
         if referer:
             cmd.extend(["-e", referer])
         cmd.extend([url, "-o", out_path])
