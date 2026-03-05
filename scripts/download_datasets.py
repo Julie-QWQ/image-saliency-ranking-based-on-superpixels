@@ -9,13 +9,10 @@ import zipfile
 DATASETS = {
     "MSRA-B": {
         "urls": [
-            # GitHub mirror (more reliable)
-            "https://github.com/JudgingSalamander/is-pnet-cpf/releases/download/v1.0/MSRA-B.zip",
-            # Original mirrors (may fail)
-            "https://mftp.mmcheng.net/Data/MSRA-B.zip",
             "http://mftp.mmcheng.net/Data/MSRA-B.zip",
+            "https://mftp.mmcheng.net/Data/MSRA-B.zip",
         ],
-        "referer": "https://github.com/",
+        "referer": "http://mftp.mmcheng.net/",
     },
     "DUTS-TE": {
         "urls": [
@@ -38,14 +35,14 @@ def download(url, out_path, referer=None):
     req = urllib.request.Request(
         url,
         headers={
-            "User-Agent": "Mozilla/5.0",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
             "Accept": "*/*",
             "Accept-Language": "en-US,en;q=0.9",
             **({"Referer": referer} if referer else {}),
         },
     )
     try:
-        with urllib.request.urlopen(req) as resp, open(out_path, "wb") as f:
+        with urllib.request.urlopen(req, timeout=60) as resp, open(out_path, "wb") as f:
             f.write(resp.read())
         return
     except urllib.error.HTTPError as exc:
