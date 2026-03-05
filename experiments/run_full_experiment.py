@@ -45,6 +45,22 @@ from src.experiment_utils import (
     ExperimentLogger,
     compute_average_metrics,
     generate_experiment_report,
+    save_experiment_results
+)
+
+
+class FullExperimentRunner:
+    """完整实验运行器"""
+
+    def __init__(self, base_output_dir="outputs/full_experiment"):
+        self.base_dir = Path(base_output_dir)
+        self.timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        self.run_dir = self.base_dir / self.timestamp
+        self.run_dir.mkdir(parents=True, exist_ok=True)
+
+        # 创建日志
+        log_file = self.run_dir / "experiment.log"
+        self.logger = ExperimentLogger(str(log_file))
 
         self.results = {
             'timestamp': self.timestamp,
@@ -54,24 +70,11 @@ from src.experiment_utils import (
 
     def log(self, message):
         """记录日志"""
-        print(message)
-        self.log_file.write(message + "\n")
-        self.log_file.flush()
+        self.logger.log(message)
 
     def close(self):
         """关闭日志"""
-        self.log_file.close()
-
-    def train_model(self, model_type='original', epochs=3):
-        """
-        训练模型
-
-        Args:
-            model_type: 'original' 或 'improved'
-            epochs: 训练轮数
-        """
-        self.log("=" * 70)
-        self.log(f"训练 {model_type} 模型")
+        self.logger.close()
         self.log("=" * 70)
 
         # 加载配置
