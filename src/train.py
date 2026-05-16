@@ -115,7 +115,7 @@ def train(config_path, no_val=False, resume_path=None):
         optimizer.load_state_dict(ckpt["optimizer_state"])
         start_epoch = ckpt["epoch"] + 1
         loss_history = ckpt.get("loss_history", [])
-    val_history = {"mae": [], "iou": [], "f1": []}
+    val_history = {"mae": [], "iou": [], "f1": [], "loss": []}  # 添加验证损失历史
     for epoch in range(start_epoch, cfg["train"]["epochs"] + 1):
         model.train()
         running_loss = 0.0
@@ -168,12 +168,13 @@ def train(config_path, no_val=False, resume_path=None):
             logger.info("running validation...")
             val_metrics = _maybe_eval(model, cfg, device, no_val=no_val)
         if val_metrics:
-            logger.info("epoch %d val - mae: %.4f, iou: %.4f, f1: %.4f",
-                       epoch, val_metrics["mae"], val_metrics["iou"], val_metrics["f1"])
+            logger.info("epoch %d val - loss: %.4f, mae: %.4f, iou: %.4f, f1: %.4f",
+                       epoch, val_metrics["loss"], val_metrics["mae"], val_metrics["iou"], val_metrics["f1"])
             save_json(val_metrics, os.path.join(run_dir, f"val_metrics_epoch_{epoch}.json"))
             val_history["mae"].append(val_metrics["mae"])
             val_history["iou"].append(val_metrics["iou"])
             val_history["f1"].append(val_metrics["f1"])
+            val_history["loss"].append(val_metrics["loss"])  # 添加验证损失
         if step_count > 0:
             avg_epoch_loss = epoch_loss / step_count
             loss_history.append(avg_epoch_loss)
@@ -187,8 +188,8 @@ def train(config_path, no_val=False, resume_path=None):
         if scheduler:
             if scheduler_type == "cosine":
                 scheduler.step()  # Cosine调度器每个epoch自动更新
-            elif scheduler_type == "plateau":
-                scheduler.step(avg_epoch_loss)  # Plateau调度器需要传入指标
+            elif scheduler_type == "plateau" and val_metrics:
+                scheduler.step(val_metrics["loss"])  # Plateau调度器监控验证损失
 
             current_lr = optimizer.param_groups[0]['lr']
             logger.info("learning rate: %.6f", current_lr)
@@ -197,6 +198,7 @@ def train(config_path, no_val=False, resume_path=None):
         log_dict = {"epoch": epoch, "train/loss": avg_epoch_loss, "train/lr": optimizer.param_groups[0]['lr']}
         if val_metrics:
             log_dict.update({
+                "val/loss": val_metrics["loss"],  # 添加验证损失
                 "val/mae": val_metrics["mae"],
                 "val/iou": val_metrics["iou"],
                 "val/f1": val_metrics["f1"],

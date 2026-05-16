@@ -91,6 +91,13 @@ def compute_metrics(pred, gt, threshold=0.5):
     pred = pred.astype(np.float32)
     gt = gt.astype(np.float32)
     mae = np.mean(np.abs(pred - gt))
+
+    # 计算验证损失（BCE损失）
+    import torch
+    pred_tensor = torch.from_numpy(pred).float()
+    gt_tensor = torch.from_numpy(gt).float()
+    val_loss = torch.nn.functional.binary_cross_entropy_with_logits(pred_tensor, gt_tensor).item()
+
     pred_bin = (pred >= threshold).astype(np.uint8)
     gt_bin = (gt >= 0.5).astype(np.uint8)
     intersection = np.logical_and(pred_bin, gt_bin).sum()
@@ -99,4 +106,4 @@ def compute_metrics(pred, gt, threshold=0.5):
     precision = intersection / (pred_bin.sum() + 1e-8)
     recall = intersection / (gt_bin.sum() + 1e-8)
     f1 = 2 * precision * recall / (precision + recall + 1e-8)
-    return {"mae": float(mae), "iou": float(iou), "f1": float(f1)}
+    return {"mae": float(mae), "iou": float(iou), "f1": float(f1), "loss": val_loss}
