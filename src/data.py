@@ -5,7 +5,6 @@ import hashlib
 import logging
 import os
 from concurrent.futures import ProcessPoolExecutor
-from multiprocessing import cpu_count
 
 import numpy as np
 import torch
@@ -199,6 +198,9 @@ def _expand_mask(base_mask, label_map, neighbors):
 
 def _process_single_image(args):
     """处理单张图像的超像素计算（用于多进程）"""
+    import cv2
+    from skimage.segmentation import slic
+
     img_path, mask_path, slic_cfg, label_cfg, cache_dir = args
 
     def _cache_key(img_path, mask_path, slic_cfg, label_cfg):
@@ -241,10 +243,26 @@ def _process_single_image(args):
     if cache_payload is not None:
         return img_path, cache_payload
 
+    # 读取图像（内置实现，避免导入问题）
+    image = cv2.imread(img_path, cv2.IMREAD_COLOR)
+    if image is None:
+        raise FileNotFoundError(img_path)
+    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+
+    mask = cv2.imread(mask_path, cv2.IMREAD_GRAYSCALE)
+    if mask is None:
+        raise FileNotFoundError(mask_path)
+    mask = (mask > 127).astype(np.uint8)
+
     # 计算超像素
-    image = read_image_rgb(img_path)
-    mask = read_mask_binary(mask_path)
-    label_map = compute_slic(image, **slic_cfg)
+    label_map = slic(
+        image,
+        n_segments=slic_cfg["num_segments"],
+        compactness=slic_cfg["compactness"],
+        sigma=slic_cfg["sigma"],
+        max_num_iter=slic_cfg["max_num_iter"],
+        start_label=slic_cfg["start_label"],
+    )
 
     # 计算标签
     sp_ids = []
