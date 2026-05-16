@@ -52,6 +52,7 @@ def train(config_path, no_val=False, resume_path=None):
         cfg["masking"],
         cfg["model"]["input_size"],
         cache_dir=cfg["paths"].get("cache_dir"),
+        num_workers=cfg["train"].get("dataloader_num_workers", 4),
     )
     logger.info("train dataset ready, samples=%d", len(train_dataset))
     logger.info("building dataloader...")

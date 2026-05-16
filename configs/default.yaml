@@ -39,6 +39,7 @@ train:  # 训练超参数
   log_interval: 100  # tqdm 进度条更新间隔（step）
   save_interval: 5  # 保存间隔（epoch）
   val_interval: 10  # 验证间隔（epoch）
+  dataloader_num_workers: 8  # 数据集构建多进程数（0=单进程，推荐4-8，根据CPU核心数调整）
 
 inference:  # 推理与可视化
   multi_scale: [200, 400, 800, 1600]  # 多尺度超像素数量

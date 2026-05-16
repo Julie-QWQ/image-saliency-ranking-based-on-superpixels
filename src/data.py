@@ -4,6 +4,8 @@ import os
 import hashlib
 import logging
 import os
+from concurrent.futures import ProcessPoolExecutor
+from multiprocessing import cpu_count
 
 import numpy as np
 import torch
@@ -24,6 +26,7 @@ class SuperpixelSaliencyDataset(Dataset):
         mask_cfg,
         input_size,
         cache_dir=None,
+        num_workers=4,
     ):
         self.images = _list_images(images_dir)
         self.masks = _match_masks(self.images, masks_dir)
@@ -32,9 +35,8 @@ class SuperpixelSaliencyDataset(Dataset):
         self.mask_cfg = mask_cfg
         self.input_size = input_size
         self.cache_dir = cache_dir
+        self._num_workers = num_workers
 
-        self._image_cache = []
-        self._mask_cache = []
         self._label_maps = []
         self._adjacency = []
         self.samples = []
@@ -47,7 +49,8 @@ class SuperpixelSaliencyDataset(Dataset):
 
     def __getitem__(self, idx):
         img_idx, sp_id, label = self.samples[idx]
-        image = self._image_cache[img_idx]
+        # 动态加载图像，而不是缓存（节省内存）
+        image = read_image_rgb(self.images[img_idx])
         label_map = self._label_maps[img_idx]
         adjacency = self._adjacency[img_idx]
 
@@ -71,30 +74,70 @@ class SuperpixelSaliencyDataset(Dataset):
 
     def _build_index(self):
         total_images = len(self.images)
-        self._logger.info("building superpixels and samples...")
-        progress = tqdm(zip(self.images, self.masks), total=total_images, desc="build dataset", leave=False)
-        for img_path, mask_path in progress:
-            image = read_image_rgb(img_path)
-            mask = read_mask_binary(mask_path)
-            cache_payload = self._load_cache(img_path, mask_path)
-            if cache_payload is None:
-                label_map = compute_slic(image, **self.slic_cfg)
-                sp_ids, sp_labels = _label_superpixels(label_map, mask, self.label_cfg)
-                self._save_cache(img_path, mask_path, label_map, sp_ids, sp_labels)
-            else:
-                label_map, sp_ids, sp_labels = cache_payload
-            adjacency = build_adjacency(label_map, connectivity=8)
+        num_workers = getattr(self, '_num_workers', 4)  # 默认4个进程
 
-            self._image_cache.append(image)
-            self._mask_cache.append(mask)
-            self._label_maps.append(label_map)
-            self._adjacency.append(adjacency)
+        if num_workers > 0 and total_images > 10:
+            self._logger.info("building superpixels with %d workers...", num_workers)
+            # 准备参数
+            args_list = [
+                (img_path, mask_path, self.slic_cfg, self.label_cfg, self.cache_dir)
+                for img_path, mask_path in zip(self.images, self.masks)
+            ]
 
-            valid_before = len(self.samples)
-            for sp_id, label in zip(sp_ids, sp_labels):
-                self.samples.append((len(self._image_cache) - 1, int(sp_id), float(label)))
-            added = len(self.samples) - valid_before
-            progress.set_postfix(added=added)
+            # 多进程处理
+            with ProcessPoolExecutor(max_workers=num_workers) as executor:
+                results = list(tqdm(
+                    executor.map(_process_single_image, args_list),
+                    total=total_images,
+                    desc="build dataset",
+                    leave=False
+                ))
+
+            # 创建路径到索引的映射
+            path_to_idx = {img_path: idx for idx, img_path in enumerate(self.images)}
+
+            # 处理结果并按原始顺序存储
+            temp_results = {img_path: (label_map, sp_ids, sp_labels)
+                           for img_path, (label_map, sp_ids, sp_labels) in results}
+
+            for img_path in self.images:
+                if img_path not in temp_results:
+                    self._logger.error("Missing result for %s", img_path)
+                    continue
+                label_map, sp_ids, sp_labels = temp_results[img_path]
+                adjacency = build_adjacency(label_map, connectivity=8)
+
+                self._label_maps.append(label_map)
+                self._adjacency.append(adjacency)
+
+                valid_before = len(self.samples)
+                for sp_id, label in zip(sp_ids, sp_labels):
+                    self.samples.append((len(self._label_maps) - 1, int(sp_id), float(label)))
+        else:
+            # 单进程处理（原有逻辑）
+            self._logger.info("building superpixels (single process)...")
+            progress = tqdm(zip(self.images, self.masks), total=total_images, desc="build dataset", leave=False)
+            for img_path, mask_path in progress:
+                cache_payload = self._load_cache(img_path, mask_path)
+                if cache_payload is None:
+                    image = read_image_rgb(img_path)
+                    mask = read_mask_binary(mask_path)
+                    label_map = compute_slic(image, **self.slic_cfg)
+                    sp_ids, sp_labels = _label_superpixels(label_map, mask, self.label_cfg)
+                    self._save_cache(img_path, mask_path, label_map, sp_ids, sp_labels)
+                else:
+                    label_map, sp_ids, sp_labels = cache_payload
+                adjacency = build_adjacency(label_map, connectivity=8)
+
+                self._label_maps.append(label_map)
+                self._adjacency.append(adjacency)
+
+                valid_before = len(self.samples)
+                for sp_id, label in zip(sp_ids, sp_labels):
+                    self.samples.append((len(self._label_maps) - 1, int(sp_id), float(label)))
+                added = len(self.samples) - valid_before
+                progress.set_postfix(added=added)
+
         self._logger.info("dataset build done, images=%d samples=%d", total_images, len(self.samples))
 
     def _cache_key(self, img_path, mask_path):
@@ -152,6 +195,74 @@ def _expand_mask(base_mask, label_map, neighbors):
     for n in neighbors:
         expanded[label_map == n] = 1
     return expanded
+
+
+def _process_single_image(args):
+    """处理单张图像的超像素计算（用于多进程）"""
+    img_path, mask_path, slic_cfg, label_cfg, cache_dir = args
+
+    def _cache_key(img_path, mask_path, slic_cfg, label_cfg):
+        parts = [
+            os.path.abspath(img_path),
+            str(os.path.getmtime(img_path)),
+            os.path.abspath(mask_path),
+            str(os.path.getmtime(mask_path)),
+            str(slic_cfg),
+            str(label_cfg),
+        ]
+        digest = hashlib.sha1("|".join(parts).encode("utf-8")).hexdigest()
+        return digest
+
+    def _cache_path(img_path, mask_path, slic_cfg, label_cfg, cache_dir):
+        if not cache_dir or not img_path:
+            return None
+        os.makedirs(cache_dir, exist_ok=True)
+        key = _cache_key(img_path, mask_path, slic_cfg, label_cfg)
+        return os.path.join(cache_dir, f"{key}.npz")
+
+    def _load_cache(img_path, mask_path, slic_cfg, label_cfg, cache_dir):
+        cache_path = _cache_path(img_path, mask_path, slic_cfg, label_cfg, cache_dir)
+        if not cache_path or not os.path.exists(cache_path):
+            return None
+        try:
+            data = np.load(cache_path)
+            return data["label_map"], data["sp_ids"], data["sp_labels"]
+        except Exception:
+            return None
+
+    def _save_cache(img_path, mask_path, slic_cfg, label_cfg, cache_dir, label_map, sp_ids, sp_labels):
+        cache_path = _cache_path(img_path, mask_path, slic_cfg, label_cfg, cache_dir)
+        if not cache_path:
+            return
+        np.savez_compressed(cache_path, label_map=label_map, sp_ids=sp_ids, sp_labels=sp_labels)
+
+    # 检查缓存
+    cache_payload = _load_cache(img_path, mask_path, slic_cfg, label_cfg, cache_dir)
+    if cache_payload is not None:
+        return img_path, cache_payload
+
+    # 计算超像素
+    image = read_image_rgb(img_path)
+    mask = read_mask_binary(mask_path)
+    label_map = compute_slic(image, **slic_cfg)
+
+    # 计算标签
+    sp_ids = []
+    sp_labels = []
+    for sp_id in np.unique(label_map):
+        sp_mask = label_map == sp_id
+        ratio = mask[sp_mask].mean() if sp_mask.any() else 0.0
+        if ratio >= label_cfg["tau_pos"]:
+            label = 1.0
+        elif ratio <= label_cfg["tau_neg"]:
+            label = 0.0
+        else:
+            continue
+        sp_ids.append(int(sp_id))
+        sp_labels.append(float(label))
+
+    _save_cache(img_path, mask_path, slic_cfg, label_cfg, cache_dir, label_map, sp_ids, sp_labels)
+    return img_path, (label_map, np.array(sp_ids), np.array(sp_labels))
 
 
 def _label_from_ratio(ratio, label_cfg):
