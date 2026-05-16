@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+data/
+outputs/
+logs/
+*.log
+*.pt
+docs/
+.vscode/
+CLAUDE.md
+实验笔记.md

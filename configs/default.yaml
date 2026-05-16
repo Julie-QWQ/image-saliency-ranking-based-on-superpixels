@@ -1,0 +1,55 @@
+seed: 42  # 随机种子
+
+paths:  # 数据与输出路径
+  train_images: data/train/images
+  train_masks: data/train/masks
+  val_images: data/val/images
+  val_masks: data/val/masks
+  test_images: data/test/images
+  test_masks: data/test/masks
+  output_dir: outputs
+  cache_dir: data/cache
+
+slic:  # SLIC 超像素参数
+  num_segments: 200  # 超像素数量
+  compactness: 10.0  # 紧致度
+  sigma: 1.0  # 高斯平滑
+  max_num_iter: 10  # 迭代次数
+  start_label: 0  # 起始标签
+
+labels:  # 超像素标签阈值
+  tau_pos: 0.8  # 正样本阈值
+  tau_neg: 0.2  # 负样本阈值
+  ignore_value: -1  # 忽略标签（当前代码未使用）
+
+masking:  # 邻域 mask 参数
+  n_ring: 1  # N-ring 邻域范围
+
+model:  # 网络结构参数
+  input_size: 224  # 输入分支尺寸
+  feature_dim: 128  # 分支特征维度
+  mlp_hidden: 64  # 融合层隐藏维度
+
+train:  # 训练超参数
+  batch_size: 128
+  num_workers: 10
+  lr: 0.00001
+  weight_decay: 0.00001
+  epochs: 150
+  log_interval: 100  # tqdm 进度条更新间隔（step）
+  save_interval: 5  # 保存间隔（epoch）
+  val_interval: 10  # 验证间隔（epoch）
+
+inference:  # 推理与可视化
+  multi_scale: [200, 400, 800, 1600]  # 多尺度超像素数量
+  save_visuals: true  # 是否保存热力图/叠加图
+  batch_size: 64  # 同图内超像素 batch 推理大小
+
+runtime:  # 运行时设置
+  device: auto  # auto / cpu / cuda
+  deterministic: true  # 复现性开关
+
+wandb:  # WandB 实验追踪
+  enable: true  # 是否启用 WandB
+  project: superpixel-saliency  # 项目名称
+  mode: online  # online: 正常上传, offline: 本地缓存后上传, disabled: 禁用
