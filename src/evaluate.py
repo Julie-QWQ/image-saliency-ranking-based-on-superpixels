@@ -15,46 +15,73 @@ def evaluate(model, images_dir, masks_dir, cfg, device, max_images=None):
     if max_images is not None:
         images = images[:max_images]
         masks = masks[:max_images]
-    metrics = []
 
     slic_cfg = cfg["slic"]
     mask_cfg = cfg["masking"]
     input_size = cfg["model"]["input_size"]
     k_list = cfg["inference"]["multi_scale"]
     batch_size = cfg["inference"].get("batch_size", 64)
+    num_workers = cfg["train"].get("val_workers", 8)  # 数据准备并行数
     cache_dir = cfg["paths"].get("cache_dir")
 
-    progress = tqdm(zip(images, masks), total=len(images), desc="validate", leave=False)
-    for img_path, mask_path in progress:
-        image = read_image_rgb(img_path)
-        gt = read_mask_binary(mask_path)
-        if k_list:
-            heatmap = predict_multiscale(
-                model,
-                image,
-                slic_cfg,
-                mask_cfg,
-                input_size,
-                device,
-                k_list,
-                batch_size=batch_size,
-                cache_dir=cache_dir,
-                image_path=img_path,
-            )
-        else:
-            heatmap = predict_image(
-                model,
-                image,
-                slic_cfg,
-                mask_cfg,
-                input_size,
-                device,
-                batch_size=batch_size,
-                cache_dir=cache_dir,
-                image_path=img_path,
-            )
-        metrics.append(compute_metrics(heatmap, gt))
-        progress.set_postfix(count=len(metrics))
+    # 数据准备并行化（减少GPU等待时间）
+    def _prepare_image_data(args):
+        """并行准备图像数据（CPU密集型）"""
+        img_path, mask_path = args
+        return {
+            'img_path': img_path,
+            'mask_path': mask_path,
+            'image': read_image_rgb(img_path),
+            'gt': read_mask_binary(mask_path)
+        }
+
+    metrics = []
+    batch_size_preprocess = num_workers  # 每次并行准备的图像数
+
+    with tqdm(total=len(images), desc="validate", leave=False) as pbar:
+        for start_idx in range(0, len(images), batch_size_preprocess):
+            end_idx = min(start_idx + batch_size_preprocess, len(images))
+            batch_images = images[start_idx:end_idx]
+            batch_masks = masks[start_idx:end_idx]
+
+            # 并行准备数据（读取图像、超像素计算等）
+            from concurrent.futures import ProcessPoolExecutor
+            args_list = list(zip(batch_images, batch_masks))
+
+            with ProcessPoolExecutor(max_workers=num_workers) as executor:
+                prepared_data = list(executor.map(_prepare_image_data, args_list))
+
+            # GPU推理部分（串行，但数据已准备好）
+            for data in prepared_data:
+                if k_list:
+                    heatmap = predict_multiscale(
+                        model,
+                        data['image'],
+                        slic_cfg,
+                        mask_cfg,
+                        input_size,
+                        device,
+                        k_list,
+                        batch_size=batch_size,
+                        cache_dir=cache_dir,
+                        image_path=data['img_path'],
+                    )
+                else:
+                    heatmap = predict_image(
+                        model,
+                        data['image'],
+                        slic_cfg,
+                        mask_cfg,
+                        input_size,
+                        device,
+                        batch_size=batch_size,
+                        cache_dir=cache_dir,
+                        image_path=data['img_path'],
+                    )
+
+                metrics.append(compute_metrics(heatmap, data['gt']))
+                pbar.update(1)
+                pbar.set_postfix(count=len(metrics))
 
     return _aggregate(metrics)
 

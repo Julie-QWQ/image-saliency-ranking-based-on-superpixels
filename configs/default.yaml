@@ -31,23 +31,26 @@ model:  # 网络结构参数
   mlp_hidden: 64  # 融合层隐藏维度
 
 train:  # 训练超参数
-  batch_size: 32
-  num_workers: 4
-  lr: 0.001  # 初始学习率（Cosine调度的起始学习率）
+  batch_size: 192
+  num_workers: 12
+  lr: 0.004  # 初始学习率（Cosine调度的起始学习率）
   weight_decay: 0.0001
-  epochs: 50  # 单周期Cosine调度
+  epochs: 40  # 单周期Cosine调度
   log_interval: 100  # tqdm 进度条更新间隔（step）
   save_interval: 5  # 保存间隔（epoch）
-  val_interval: 10  # 验证间隔（epoch）
+  val_interval: 5  # 验证间隔（epoch）
+  val_max_images: null  # 验证时最大图像数（null=全部，可设置数字快速验证）
+  val_workers: 12  # 验证时并行处理的图像数（充分利用多核）
   dataloader_num_workers: 12  # 数据集构建多进程数
   scheduler: cosine  # 使用 Cosine 学习率调度
-  scheduler_t_max: 50  # Cosine 调度的周期（等于总epoch数）
-  scheduler_eta_min: 0.000001  # 最小学习率（Cosine 调度的结束学习率）
+  scheduler_t_max: 40  # Cosine 调度的周期（等于总epoch数）
+  scheduler_eta_min: 0.00001  # 最小学习率（Cosine 调度的结束学习率）
 
 inference:  # 推理与可视化
   multi_scale: [200, 400, 800, 1600]  # 多尺度超像素数量
   save_visuals: true  # 是否保存热力图/叠加图
   batch_size: 64  # 同图内超像素 batch 推理大小
+  multiscale_workers: 4  # 多尺度并行处理的进程数
 
 runtime:  # 运行时设置
   device: auto  # auto / cpu / cuda

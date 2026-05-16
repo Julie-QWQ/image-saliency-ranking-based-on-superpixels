@@ -218,8 +218,12 @@ def _maybe_eval(model, cfg, device, no_val=False):
     val_masks = cfg["paths"]["val_masks"]
     if not (os.path.exists(val_images) and os.path.exists(val_masks)):
         return None
+
+    # 快速验证：只验证部分图像
+    max_images = cfg["train"].get("val_max_images", None)
+
     model.eval()
-    return evaluate(model, val_images, val_masks, cfg, device)
+    return evaluate(model, val_images, val_masks, cfg, device, max_images=max_images)
 
 
 def main():

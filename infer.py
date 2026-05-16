@@ -47,6 +47,7 @@ def main():
     input_size = cfg["model"]["input_size"]
     k_list = cfg["inference"]["multi_scale"]
     batch_size = cfg["inference"].get("batch_size", 64)
+    num_workers = cfg["inference"].get("multiscale_workers", 4)  # 多尺度并行进程数
     cache_dir = cfg["paths"].get("cache_dir")
 
     progress = tqdm(images, desc=f"infer {args.split}", leave=False)
@@ -65,6 +66,7 @@ def main():
                 batch_size=batch_size,
                 cache_dir=cache_dir,
                 image_path=img_path,
+                num_workers=num_workers,  # 传递并行参数
             )
         else:
             heatmap = predict_image(
