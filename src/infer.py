@@ -49,21 +49,17 @@ def predict_image(model, image, slic_cfg, mask_cfg, input_size, device, batch_si
     return heatmap
 
 
-def predict_multiscale(model, image, slic_cfg, mask_cfg, input_size, device, k_list, batch_size=64, cache_dir=None, image_path=None, num_workers=4):
-    """并行多尺度推理"""
-    from concurrent.futures import ProcessPoolExecutor
-
-    def _predict_single_scale(args):
-        """单个尺度的预测函数"""
-        k, image, slic_cfg, mask_cfg, input_size, device, batch_size, cache_dir, image_path = args
-
+def predict_multiscale(model, image, slic_cfg, mask_cfg, input_size, device, k_list, batch_size=64, cache_dir=None, image_path=None, num_workers=None):
+    """多尺度推理（串行）"""
+    heatmaps = []
+    for k in k_list:
         cfg = dict(slic_cfg)
         cfg["num_segments"] = int(k)
 
         # 生成不同的缓存key，避免冲突
         scale_image_path = f"{image_path}_scale_{k}" if image_path else None
 
-        return predict_image(
+        heatmap = predict_image(
             model,
             image,
             cfg,
@@ -74,14 +70,7 @@ def predict_multiscale(model, image, slic_cfg, mask_cfg, input_size, device, k_l
             cache_dir=cache_dir,
             image_path=scale_image_path,
         )
-
-    # 准备参数
-    args_list = [(k, image, slic_cfg, mask_cfg, input_size, device, batch_size, cache_dir, image_path)
-                 for k in k_list]
-
-    # 并行处理多个尺度
-    with ProcessPoolExecutor(max_workers=num_workers) as executor:
-        heatmaps = list(executor.map(_predict_single_scale, args_list))
+        heatmaps.append(heatmap)
 
     # 平均多个尺度的结果
     return np.mean(heatmaps, axis=0)

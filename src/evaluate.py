@@ -5,7 +5,7 @@ import numpy as np
 import torch
 from tqdm import tqdm
 
-from .infer import predict_multiscale, predict_image
+from .infer import predict_image
 from .utils import compute_metrics, read_image_rgb, read_mask_binary, save_json
 
 
@@ -53,31 +53,18 @@ def evaluate(model, images_dir, masks_dir, cfg, device, max_images=None):
 
             # GPU推理部分（串行，但数据已准备好）
             for data in prepared_data:
-                if k_list:
-                    heatmap = predict_multiscale(
-                        model,
-                        data['image'],
-                        slic_cfg,
-                        mask_cfg,
-                        input_size,
-                        device,
-                        k_list,
-                        batch_size=batch_size,
-                        cache_dir=cache_dir,
-                        image_path=data['img_path'],
-                    )
-                else:
-                    heatmap = predict_image(
-                        model,
-                        data['image'],
-                        slic_cfg,
-                        mask_cfg,
-                        input_size,
-                        device,
-                        batch_size=batch_size,
-                        cache_dir=cache_dir,
-                        image_path=data['img_path'],
-                    )
+                # 验证时使用单尺度推理（更快），避免多尺度并行问题
+                heatmap = predict_image(
+                    model,
+                    data['image'],
+                    slic_cfg,
+                    mask_cfg,
+                    input_size,
+                    device,
+                    batch_size=batch_size,
+                    cache_dir=cache_dir,
+                    image_path=data['img_path'],
+                )
 
                 metrics.append(compute_metrics(heatmap, data['gt']))
                 pbar.update(1)
