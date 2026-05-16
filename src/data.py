@@ -84,13 +84,16 @@ class SuperpixelSaliencyDataset(Dataset):
             ]
 
             # 多进程处理
+            self._logger.info("processing %d images with %d workers...", total_images, num_workers)
             with ProcessPoolExecutor(max_workers=num_workers) as executor:
-                results = list(tqdm(
-                    executor.map(_process_single_image, args_list),
-                    total=total_images,
-                    desc="build dataset",
-                    leave=False
-                ))
+                # 使用手动进度更新，避免多进程tqdm显示问题
+                results = []
+                with tqdm(total=total_images, desc="build dataset", unit="img", leave=True) as pbar:
+                    for result in executor.map(_process_single_image, args_list):
+                        results.append(result)
+                        pbar.update(1)
+                        pbar.set_postfix(processed=f"{len(results)}/{total_images}")
+            self._logger.info("superpixel computation completed")
 
             # 创建路径到索引的映射
             path_to_idx = {img_path: idx for idx, img_path in enumerate(self.images)}
@@ -99,20 +102,36 @@ class SuperpixelSaliencyDataset(Dataset):
             temp_results = {img_path: (label_map, sp_ids, sp_labels)
                            for img_path, (label_map, sp_ids, sp_labels) in results}
 
+            self._logger.info("building adjacency and loading images with %d workers...", num_workers)
+            # 准备参数：(img_path, label_map)
+            args_list = [(img_path, temp_results[img_path][0]) for img_path in self.images]
+
+            # 多进程处理：加载图像 + 构建邻接图
+            with ProcessPoolExecutor(max_workers=num_workers) as executor:
+                results_list = []
+                with tqdm(total=total_images, desc="finalizing", unit="img") as pbar:
+                    for result in executor.map(_load_image_and_build_adjacency, args_list):
+                        results_list.append(result)
+                        pbar.update(1)
+                        pbar.set_postfix(loaded=len(results_list))
+
+            # 按原始顺序存储结果
+            results_dict = {img_path: (image, adjacency)
+                           for img_path, image, adjacency in results_list}
+
             for img_path in self.images:
                 if img_path not in temp_results:
                     self._logger.error("Missing result for %s", img_path)
                     continue
-                label_map, sp_ids, sp_labels = temp_results[img_path]
-                adjacency = build_adjacency(label_map, connectivity=8)
 
-                # 缓存图像
-                image = read_image_rgb(img_path)
+                label_map, sp_ids, sp_labels = temp_results[img_path]
+                image, adjacency = results_dict[img_path]
+
                 self._image_cache.append(image)
                 self._label_maps.append(label_map)
                 self._adjacency.append(adjacency)
 
-                valid_before = len(self.samples)
+                # 生成样本
                 for sp_id, label in zip(sp_ids, sp_labels):
                     self.samples.append((len(self._label_maps) - 1, int(sp_id), float(label)))
         else:
@@ -286,6 +305,25 @@ def _process_single_image(args):
 
     _save_cache(img_path, mask_path, slic_cfg, label_cfg, cache_dir, label_map, sp_ids, sp_labels)
     return img_path, (label_map, np.array(sp_ids), np.array(sp_labels))
+
+
+def _load_image_and_build_adjacency(args):
+    """加载图像并构建邻接图（用于多进程）"""
+    import cv2
+
+    img_path, label_map = args
+
+    # 读取图像
+    image = cv2.imread(img_path, cv2.IMREAD_COLOR)
+    if image is None:
+        raise FileNotFoundError(img_path)
+    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+
+    # 构建邻接图
+    from .superpixel import build_adjacency
+    adjacency = build_adjacency(label_map, connectivity=8)
+
+    return img_path, image, adjacency
 
 
 def _label_from_ratio(ratio, label_cfg):

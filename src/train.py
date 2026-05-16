@@ -73,6 +73,20 @@ def train(config_path, no_val=False, resume_path=None):
         lr=cfg["train"]["lr"],
         weight_decay=cfg["train"]["weight_decay"],
     )
+
+    # 添加学习率调度器
+    scheduler = None
+    if cfg["train"].get("scheduler", False):
+        from torch.optim.lr_scheduler import ReduceLROnPlateau
+        scheduler = ReduceLROnPlateau(
+            optimizer,
+            mode='min',  # 监控loss（越小越好）
+            factor=cfg["train"].get("scheduler_factor", 0.5),
+            patience=cfg["train"].get("scheduler_patience", 10),
+            verbose=True
+        )
+        logger.info("learning rate scheduler enabled")
+
     criterion = torch.nn.BCEWithLogitsLoss()
     logger.info("optimizer and loss ready")
 
@@ -103,11 +117,17 @@ def train(config_path, no_val=False, resume_path=None):
             optimizer.zero_grad()
             logits = model(xa, xb, xc)
             loss = criterion(logits, y)
+            loss_value = loss.item()  # 先保存值
             loss.backward()
             optimizer.step()
 
-            running_loss += loss.item()
-            epoch_loss += loss.item()
+            # 显式释放显存
+            del logits, loss
+            if step % 10 == 0:
+                torch.cuda.empty_cache()
+
+            running_loss += loss_value
+            epoch_loss += loss_value
             step_count += 1
             if step % cfg["train"]["log_interval"] == 0:
                 avg_loss = running_loss / cfg["train"]["log_interval"]
@@ -149,8 +169,14 @@ def train(config_path, no_val=False, resume_path=None):
             else:
                 logger.info("epoch %d - train: %.4f", epoch, avg_epoch_loss)
 
+        # 学习率调度
+        if scheduler:
+            scheduler.step(avg_epoch_loss)
+            current_lr = optimizer.param_groups[0]['lr']
+            logger.info("learning rate: %.6f", current_lr)
+
         # Log to wandb
-        log_dict = {"epoch": epoch, "train/loss": avg_epoch_loss}
+        log_dict = {"epoch": epoch, "train/loss": avg_epoch_loss, "train/lr": optimizer.param_groups[0]['lr']}
         if val_metrics:
             log_dict.update({
                 "val/mae": val_metrics["mae"],

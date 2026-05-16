@@ -38,6 +38,11 @@ def main():
         raise RuntimeError("MSRA-B not found or empty")
 
     random.shuffle(pairs)
+
+    # 只使用前1000个样本
+    total_samples = 1000
+    pairs = pairs[:total_samples]
+
     total = len(pairs)
     train_count = int(total * 0.8)
     val_count = int(total * 0.1)
@@ -57,7 +62,7 @@ def main():
     copy_pairs(val_pairs, val_images, val_masks)
     copy_pairs(test_pairs, test_images, test_masks)
 
-    print(f"Prepared from MSRA-B: {len(train_pairs)} train, {len(val_pairs)} val, {len(test_pairs)} test")
+    print(f"Prepared from MSRA-B (1000 samples): {len(train_pairs)} train, {len(val_pairs)} val, {len(test_pairs)} test")
 
 
 if __name__ == "__main__":

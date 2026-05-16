@@ -15,19 +15,37 @@ def compute_slic(image, num_segments, compactness, sigma, max_num_iter, start_la
 
 
 def build_adjacency(label_map, connectivity=8):
+    """优化版的邻接图构建，减少循环次数"""
     h, w = label_map.shape
     adjacency = {}
-    for y in range(h):
-        for x in range(w):
-            current = int(label_map[y, x])
-            if current not in adjacency:
-                adjacency[current] = set()
-            for dy, dx in _neighbors(connectivity):
+
+    # 使用偏移量数组来检查邻居
+    if connectivity == 8:
+        offsets = [(-1,-1), (-1,0), (-1,1), (0,-1), (0,1), (1,-1), (1,0), (1,1)]
+    else:
+        offsets = [(-1,0), (1,0), (0,-1), (0,1)]
+
+    # 只遍历超像素边界，而不是所有像素
+    unique_labels = np.unique(label_map)
+
+    for label in unique_labels:
+        label = int(label)
+        neighbors = set()
+
+        # 找到当前超像素的所有像素位置
+        rows, cols = np.where(label_map == label)
+
+        # 只检查边界像素（有不同邻居的像素）
+        for y, x in zip(rows, cols):
+            for dy, dx in offsets:
                 ny, nx = y + dy, x + dx
                 if 0 <= ny < h and 0 <= nx < w:
                     neighbor = int(label_map[ny, nx])
-                    if neighbor != current:
-                        adjacency[current].add(neighbor)
+                    if neighbor != label:
+                        neighbors.add(neighbor)
+
+        adjacency[label] = neighbors
+
     return adjacency
 
 
