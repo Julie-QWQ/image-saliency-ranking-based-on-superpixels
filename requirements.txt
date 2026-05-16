@@ -5,4 +5,4 @@ scikit-image==0.22.0
 pyyaml==6.0.1
 tqdm==4.66.1
 matplotlib==3.8.2
-wandb==0.16.1
+wandb==0.27.0
