@@ -18,8 +18,8 @@ slic:  # SLIC 超像素参数
   start_label: 0  # 起始标签
 
 labels:  # 超像素标签阈值
-  tau_pos: 0.8  # 正样本阈值
-  tau_neg: 0.2  # 负样本阈值
+  tau_pos: 0.7  # 降低正样本阈值（原来0.8）
+  tau_neg: 0.3  # 提高负样本阈值（原来0.2）
   ignore_value: -1  # 忽略标签（当前代码未使用）
 
 masking:  # 邻域 mask 参数
@@ -31,9 +31,9 @@ model:  # 网络结构参数
   mlp_hidden: 64  # 融合层隐藏维度
 
 train:  # 训练超参数
-  batch_size: 192
+  batch_size: 96  # 平衡GPU利用率和训练稳定性
   num_workers: 12
-  lr: 0.004  # 初始学习率（Cosine调度的起始学习率）
+  lr: 0.002  # 适配较大batch的学习率
   weight_decay: 0.0001
   epochs: 40  # 单周期Cosine调度
   log_interval: 100  # tqdm 进度条更新间隔（step）

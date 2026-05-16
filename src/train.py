@@ -1,5 +1,6 @@
 import os
 
+import numpy as np
 import torch
 import wandb
 from torch.utils.data import DataLoader
@@ -121,6 +122,11 @@ def train(config_path, no_val=False, resume_path=None):
         running_loss = 0.0
         epoch_loss = 0.0
         step_count = 0
+
+        # 计算训练集MAE（用于对比过拟合）
+        train_preds = []
+        train_targets = []
+
         progress = tqdm(train_loader, desc=f"epoch {epoch}", leave=False, dynamic_ncols=True)
         for step, (xa, xb, xc, y) in enumerate(progress, start=1):
             xa = xa.to(device)
@@ -135,6 +141,12 @@ def train(config_path, no_val=False, resume_path=None):
             loss.backward()
             optimizer.step()
 
+            # 收集预测和目标用于计算MAE
+            with torch.no_grad():
+                probs = torch.sigmoid(logits).cpu().numpy()
+                train_preds.extend(probs.flatten())
+                train_targets.extend(y.cpu().numpy().flatten())
+
             # 显式释放显存
             del logits, loss
             if step % 10 == 0:
@@ -147,6 +159,9 @@ def train(config_path, no_val=False, resume_path=None):
                 avg_loss = running_loss / cfg["train"]["log_interval"]
                 progress.set_postfix(loss=f"{avg_loss:.4f}")
                 running_loss = 0.0
+
+        # 计算训练集MAE
+        train_mae = np.mean(np.abs(np.array(train_preds) - np.array(train_targets)))
 
         if epoch % cfg["train"]["save_interval"] == 0:
             ckpt_path = os.path.join(run_dir, f"model_epoch_{epoch}.pt")
@@ -179,10 +194,10 @@ def train(config_path, no_val=False, resume_path=None):
             avg_epoch_loss = epoch_loss / step_count
             loss_history.append(avg_epoch_loss)
             if val_metrics:
-                logger.info("epoch %d - train: %.4f, val_mae: %.4f, val_iou: %.4f",
-                           epoch, avg_epoch_loss, val_metrics["mae"], val_metrics["iou"])
+                logger.info("epoch %d - train: loss=%.4f mae=%.4f | val: loss=%.4f mae=%.4f iou=%.4f f1=%.4f",
+                           epoch, avg_epoch_loss, train_mae, val_metrics["loss"], val_metrics["mae"], val_metrics["iou"], val_metrics["f1"])
             else:
-                logger.info("epoch %d - train: %.4f", epoch, avg_epoch_loss)
+                logger.info("epoch %d - train: loss=%.4f mae=%.4f", epoch, avg_epoch_loss, train_mae)
 
         # 学习率调度
         if scheduler:
@@ -195,10 +210,15 @@ def train(config_path, no_val=False, resume_path=None):
             logger.info("learning rate: %.6f", current_lr)
 
         # Log to wandb
-        log_dict = {"epoch": epoch, "train/loss": avg_epoch_loss, "train/lr": optimizer.param_groups[0]['lr']}
+        log_dict = {
+            "epoch": epoch,
+            "train/loss": avg_epoch_loss,
+            "train/mae": train_mae,
+            "train/lr": optimizer.param_groups[0]['lr']
+        }
         if val_metrics:
             log_dict.update({
-                "val/loss": val_metrics["loss"],  # 添加验证损失
+                "val/loss": val_metrics["loss"],
                 "val/mae": val_metrics["mae"],
                 "val/iou": val_metrics["iou"],
                 "val/f1": val_metrics["f1"],
