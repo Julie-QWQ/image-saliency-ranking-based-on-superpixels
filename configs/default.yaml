@@ -33,16 +33,16 @@ model:  # 网络结构参数
 train:  # 训练超参数
   batch_size: 32
   num_workers: 4
-  lr: 0.001
+  lr: 0.001  # 初始学习率（Cosine调度的起始学习率）
   weight_decay: 0.0001
-  epochs: 50
+  epochs: 50  # 单周期Cosine调度
   log_interval: 100  # tqdm 进度条更新间隔（step）
   save_interval: 5  # 保存间隔（epoch）
   val_interval: 10  # 验证间隔（epoch）
   dataloader_num_workers: 12  # 数据集构建多进程数
-  scheduler: true  # 是否使用学习率调度器
-  scheduler_patience: 3  # 验证指标不改善的epoch数后降低学习率
-  scheduler_factor: 0.5  # 学习率降低的因子
+  scheduler: cosine  # 使用 Cosine 学习率调度
+  scheduler_t_max: 50  # Cosine 调度的周期（等于总epoch数）
+  scheduler_eta_min: 0.000001  # 最小学习率（Cosine 调度的结束学习率）
 
 inference:  # 推理与可视化
   multi_scale: [200, 400, 800, 1600]  # 多尺度超像素数量

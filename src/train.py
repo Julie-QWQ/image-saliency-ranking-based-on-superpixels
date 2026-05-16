@@ -76,16 +76,30 @@ def train(config_path, no_val=False, resume_path=None):
 
     # 添加学习率调度器
     scheduler = None
-    if cfg["train"].get("scheduler", False):
+    scheduler_type = cfg["train"].get("scheduler", None)
+    if scheduler_type == "cosine":
+        from torch.optim.lr_scheduler import CosineAnnealingLR
+        scheduler = CosineAnnealingLR(
+            optimizer,
+            T_max=cfg["train"].get("scheduler_t_max", cfg["train"]["epochs"]),
+            eta_min=cfg["train"].get("scheduler_eta_min", 1e-6)
+        )
+        logger.info("cosine learning rate scheduler enabled (T_max=%d, eta_min=%.6f)",
+                   cfg["train"].get("scheduler_t_max", cfg["train"]["epochs"]),
+                   cfg["train"].get("scheduler_eta_min", 1e-6))
+    elif scheduler_type == "plateau":
         from torch.optim.lr_scheduler import ReduceLROnPlateau
         scheduler = ReduceLROnPlateau(
             optimizer,
-            mode='min',  # 监控loss（越小越好）
+            mode='min',
             factor=cfg["train"].get("scheduler_factor", 0.5),
             patience=cfg["train"].get("scheduler_patience", 10),
             verbose=True
         )
-        logger.info("learning rate scheduler enabled")
+        logger.info("reduceLROnPlateau learning rate scheduler enabled")
+    else:
+        logger.info("no learning rate scheduler")
+        scheduler_type = None
 
     criterion = torch.nn.BCEWithLogitsLoss()
     logger.info("optimizer and loss ready")
@@ -171,7 +185,11 @@ def train(config_path, no_val=False, resume_path=None):
 
         # 学习率调度
         if scheduler:
-            scheduler.step(avg_epoch_loss)
+            if scheduler_type == "cosine":
+                scheduler.step()  # Cosine调度器每个epoch自动更新
+            elif scheduler_type == "plateau":
+                scheduler.step(avg_epoch_loss)  # Plateau调度器需要传入指标
+
             current_lr = optimizer.param_groups[0]['lr']
             logger.info("learning rate: %.6f", current_lr)
 
