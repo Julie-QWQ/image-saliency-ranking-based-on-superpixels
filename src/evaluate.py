@@ -9,6 +9,17 @@ from .infer import predict_multiscale, predict_image
 from .utils import compute_metrics, read_image_rgb, read_mask_binary, save_json
 
 
+def _prepare_image_data(args):
+    """并行准备图像数据（CPU密集型）- 顶层函数以便序列化"""
+    img_path, mask_path = args
+    return {
+        'img_path': img_path,
+        'mask_path': mask_path,
+        'image': read_image_rgb(img_path),
+        'gt': read_mask_binary(mask_path)
+    }
+
+
 def evaluate(model, images_dir, masks_dir, cfg, device, max_images=None):
     images = _list_images(images_dir)
     masks = _match_masks(images, masks_dir)
@@ -23,17 +34,6 @@ def evaluate(model, images_dir, masks_dir, cfg, device, max_images=None):
     batch_size = cfg["inference"].get("batch_size", 64)
     num_workers = cfg["train"].get("val_workers", 8)  # 数据准备并行数
     cache_dir = cfg["paths"].get("cache_dir")
-
-    # 数据准备并行化（减少GPU等待时间）
-    def _prepare_image_data(args):
-        """并行准备图像数据（CPU密集型）"""
-        img_path, mask_path = args
-        return {
-            'img_path': img_path,
-            'mask_path': mask_path,
-            'image': read_image_rgb(img_path),
-            'gt': read_mask_binary(mask_path)
-        }
 
     metrics = []
     batch_size_preprocess = num_workers  # 每次并行准备的图像数
