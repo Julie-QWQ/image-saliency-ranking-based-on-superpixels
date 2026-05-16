@@ -75,11 +75,12 @@ def evaluate(model, images_dir, masks_dir, cfg, device, max_images=None):
 
 def _aggregate(metrics_list):
     if not metrics_list:
-        return {"mae": 0.0, "iou": 0.0, "f1": 0.0}
+        return {"mae": 0.0, "iou": 0.0, "f1": 0.0, "loss": 0.0}
     mae = np.mean([m["mae"] for m in metrics_list])
     iou = np.mean([m["iou"] for m in metrics_list])
     f1 = np.mean([m["f1"] for m in metrics_list])
-    return {"mae": float(mae), "iou": float(iou), "f1": float(f1)}
+    loss = np.mean([m["loss"] for m in metrics_list])
+    return {"mae": float(mae), "iou": float(iou), "f1": float(f1), "loss": float(loss)}
 
 
 def _list_images(images_dir):
