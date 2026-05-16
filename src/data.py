@@ -36,6 +36,7 @@ class SuperpixelSaliencyDataset(Dataset):
         self.cache_dir = cache_dir
         self._num_workers = num_workers
 
+        self._image_cache = []  # 恢复图像缓存
         self._label_maps = []
         self._adjacency = []
         self.samples = []
@@ -48,8 +49,7 @@ class SuperpixelSaliencyDataset(Dataset):
 
     def __getitem__(self, idx):
         img_idx, sp_id, label = self.samples[idx]
-        # 动态加载图像，而不是缓存（节省内存）
-        image = read_image_rgb(self.images[img_idx])
+        image = self._image_cache[img_idx]  # 使用缓存
         label_map = self._label_maps[img_idx]
         adjacency = self._adjacency[img_idx]
 
@@ -106,6 +106,9 @@ class SuperpixelSaliencyDataset(Dataset):
                 label_map, sp_ids, sp_labels = temp_results[img_path]
                 adjacency = build_adjacency(label_map, connectivity=8)
 
+                # 缓存图像
+                image = read_image_rgb(img_path)
+                self._image_cache.append(image)
                 self._label_maps.append(label_map)
                 self._adjacency.append(adjacency)
 
@@ -126,8 +129,10 @@ class SuperpixelSaliencyDataset(Dataset):
                     self._save_cache(img_path, mask_path, label_map, sp_ids, sp_labels)
                 else:
                     label_map, sp_ids, sp_labels = cache_payload
+                    image = read_image_rgb(img_path)  # 需要读取图像进行缓存
                 adjacency = build_adjacency(label_map, connectivity=8)
 
+                self._image_cache.append(image)
                 self._label_maps.append(label_map)
                 self._adjacency.append(adjacency)
 
